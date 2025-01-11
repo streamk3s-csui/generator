@@ -15,6 +15,37 @@ Data generated from those bikes will then be sent to an external message broker 
 
 ## Dataset
 
-Dataset sourced from [GPX Studio](https://gpx.studio/), where a route of UI campus outer ring were generated into a `.gpx` file.
+Dataset sourced from [GPX Studio](https://gpx.studio/), where a route of UI campus outer ring was dumped into a `.gpx` file.
 
 The `.gpx` file will then be parsed with the [gpxpy](https://pypi.org/project/gpxpy/) package on each bike to simulate them going through the routes from its start to its waypoint, resulting in realistic latitude & longitude data. Time will be the same as host time, and speed & temperatures will be randomized. Battery levels will drain with a fixed rate where only the start level will be randomized.
+
+
+## Quickstart (development)
+
+1. Setup virtual environment:
+
+   Windows
+   ```
+   python -m venv .venv
+   .venv\Scripts\activate.bat
+   ```
+   
+   Linux
+   ```
+   virtualenv .venv
+   source .venv/bin/activate
+   ```
+
+2. Install required packages:
+
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Setup `.env` file from `.env.example`
+
+4. Run with:
+
+   ```
+   python main.py
+   ```
