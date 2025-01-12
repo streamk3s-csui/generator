@@ -6,16 +6,16 @@ Simulates bike sharing data streams by first generating N number of bike data, t
 
 1. At a time, there will be a minimum of `10 < N` number of bikes active.
 2. There will be fluctuations where the number of bikes active will be in the following range:
-   1. Low throughput simulation: `10 < N < 100`
-   2. Medium throughput simulation: `100 < N < 1000`
-   3. High throughput simulation: `1000 < N`
+   1. Low throughput simulation: `100 < N < 500`
+   2. Medium throughput simulation: `500 < N < 1000`
+   3. High throughput simulation: `1000 < N < 1500`
    
 Data generated from those bikes will then be sent to an external message broker running on the StreamK3s platform, hosting a MQTT message broker as its operator image.
 
 
 ## Dataset
 
-Dataset sourced from [GPX Studio](https://gpx.studio/), where a route of UI campus outer ring was dumped into a `.gpx` file.
+Dataset sourced from [OpenStreetMap](https://www.openstreetmap.org/traces)'s public traces and [GPX Studio](https://gpx.studio/), where a route of UI campus outer ring was dumped into a `.gpx` file.
 
 The `.gpx` file will then be parsed with the [gpxpy](https://pypi.org/project/gpxpy/) package on each bike to simulate them going through the routes from its start to its waypoint, resulting in realistic latitude & longitude data. Time will be the same as host time, and speed & temperatures will be randomized. Battery levels will drain with a fixed rate where only the start level will be randomized.
 
