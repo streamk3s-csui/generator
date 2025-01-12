@@ -16,7 +16,7 @@ class Logger:
         """
         if self._logger is not None:
             raise RuntimeError('Logger is already setup.')
-        self._logger = logging.getLogger(__name__)
+        self._logger = logging.getLogger(service_name)
         
         log_path = f'{os.getcwd()}/logs'
         if not os.path.exists(log_path):
