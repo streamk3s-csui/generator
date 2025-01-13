@@ -1,0 +1,60 @@
+services:
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: "rabbitmq"
+      RABBITMQ_DEFAULT_PASS: "rabbitmq"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - gpx-net
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  gpx:
+    container_name: gpx-datastream
+    depends_on: 
+      - rabbitmq
+    env_file:
+        - ./.env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - GPX_DATAPATH=${GPX_DATAPATH}
+        - MQTT_BROKER_ADDR=${MQTT_BROKER_ADDR}
+        - MQTT_BROKER_TOPIC=${MQTT_BROKER_TOPIC}
+        - VECTOR_SINK_ADDR=${VECTOR_SINK_ADDR}
+    networks: 
+      - gpx-net
+    volumes:
+      - log_data:/app/logs/:ro
+
+  vector:
+    depends_on:
+      - rabbitmq
+      - gpx
+    image: timberio/vector:0.42.0-alpine
+    container_name: vector
+    volumes:
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+      # mount log file paths as necessary with :ro read only permissions
+      - log_data:/var/log/gpx:ro
+    ports:
+      - 8686:8686
+    networks:
+      - gpx-net
+
+
+networks:
+  gpx-net:
+    driver: bridge
+
+
+volumes:
+  rabbitmq_data:  
+  log_data:

@@ -1,0 +1,15 @@
+sources:
+  gpx:
+    type: file
+    include: 
+      - /var/log/gpx/*.log  # Path to log files. Update as needed.
+    ignore_older: 604800  # Ignore files older than 7 days (in seconds).
+
+sinks:
+  # Optional debug sink to see what's being processed
+  console:
+    type: console
+    inputs:
+      - gpx
+    encoding:
+      codec: json
