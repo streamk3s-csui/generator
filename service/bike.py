@@ -7,72 +7,87 @@ from datetime import datetime
 
 import gpxpy
 import gpxpy.gpx
-
-from config.logging import Logger
-
+import requests
+from config.variables import POD_IP, API_PORT, PUBLISH_PATH, POD_NAME, NAMESPACE
+from config.logging import logger
 
 
 class Bike:
     def __init__(self, number: int, gpxd) -> None:
         self.id = uuid.uuid4()
+        self.pod_ip = POD_IP
+        self.api_port = API_PORT
+        self.publish_path = PUBLISH_PATH
         self.number: int = number
         self.battery_level: int = 100
         self.temp: float = 30.0
         self.latitude: float = 0
         self.longitude: float = 0
-        self.speed: float = 0 
+        self.speed: float = 0
         self.active: bool = False
-        self.gpxd = gpxd    # parsed gpx dataset
-    
+        self.gpxd = gpxd  # parsed gpx dataset
 
     def start(self) -> None:
-        """
-        Selects and parses a random `.gpx` path dataset, then traces it to simulate realtime bike activity.
-        Sends trace data to MQTT broker with a delay of `latency`, defaults to 0.5 seconds.
-        """
+        """Start bike journey along GPX track"""
         self.active = True
         self.battery_level = random.randint(75, 100)
-            
-        # for track in gpx.tracks:
-        #     for segment in track.segments:
-        #         for point in segment.points:
-        #             # self.logger.info(f'[TRACK] Point at ({point.latitude},{point.longitude}) -> {point.elevation}')
-        #             self.publish(point.latitude, point.longitude, point.elevation)
 
-        self.finish()   
+        for track in self.gpxd.tracks:
+            for segment in track.segments:
+                for point in segment.points:
+                    if not self.active:
+                        return
+                    self.publish(point.latitude, point.longitude, point.elevation)
+                    time.sleep(0.5)
+
+        self.finish()
 
     def finish(self) -> None:
-        raise NotImplementedError
-    
+        """Stop bike journey and send termination"""
+        self.active = False
+        # Need to add termination message
+        termination_msg = {"pod": POD_NAME, "namespace": NAMESPACE, "status": "ended"}
+        # Send termination message
+        requests.post(
+            f"http://{self.pod_ip}:{self.api_port}{self.publish_path}",
+            json=termination_msg,
+        )
 
     def publish(self, latitude: float, longitude: float, elevation: float) -> None:
-        """
-        Publish a single trace data point to MQTT broker with simulated latency.
-        """
-        # simulate latency between 0.1 and 0.5 secs with equal probability
-        latency = random.choice([0.1, 0.2, 0.3, 0.4, 0.5], [0.2 for _ in range(5)])
-        message = {
-            "bike_id": str(self.id),
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "loc": {
-                "latitude": latitude,
-                "longitude": longitude,
-                "elevation": elevation, 
-            },
-            "status": {
-                "speed": self.get_speed(),
-                "battery_level": self.battery_level,
-                "temperature": self.temp
-            }
-        }
-        time.sleep(latency)
-        # publish to mqtt
+        """Send daata"""
+        try:
+            self.latitude = latitude
+            self.longitude = longitude
+            self.speed = random.uniform(0, 25)
+            self.battery_level -= 0.01
 
-    
+            data = {
+                "bike_id": str(self.id),
+                "number": self.number,
+                "timestamp": datetime.now().isoformat(),
+                "location": {
+                    "latitude": self.latitude,
+                    "longitude": self.longitude,
+                    "elevation": elevation,
+                },
+                "battery_level": self.battery_level,
+                "temperature": self.temp,
+                "speed": self.speed,
+                "active": self.active,
+            }
+
+            response = requests.post(
+                f"http://{self.pod_ip}:{self.api_port}{self.publish_path}",
+                json=data,
+                timeout=5,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to publish data: {str(e)}")
+            self.active = False  # Stop bike
 
     def get_speed(self) -> float:
         """
         Calculate speed from latitude,longitude diffs.
         """
-        raise NotImplementedError
-    
+        return 0.0

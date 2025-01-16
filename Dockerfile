@@ -1,28 +1,31 @@
 FROM python:3.11-slim
 
-# Argument variables
-ARG VECTOR_SINK_ADDR
+# StreamK3s environment variables
+ENV MY_POD_IP=""
+ENV API_PORT="4321"
+ENV PUBLISH_PATH="/post_message"
+ENV MY_POD_NAME=""
+ENV MY_POD_NAMESPACE=""
 
-# Required environment variables as build arguments here
-ARG VECTOR_SINK_ADDR=${VECTOR_SINK_ADDR}
+# Vector logging config
+ENV VECTOR_SINK_ADDR=${VECTOR_SINK_ADDR}
 
-# Keeps Python from generating .pyc files in the container
+# Python settings
 ENV PYTHONDONTWRITEBYTECODE=1
-
-# Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
-# Install pip requirements
+# Install dependencies
+WORKDIR /app
 COPY requirements.txt .
 RUN python -m pip install -r requirements.txt
 
-WORKDIR /app
-COPY . /app
+# Copy application code and dataset
+COPY . .
 
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
+# Set up non-root user
+RUN adduser -u 5678 --disabled-password --gecos "" appuser && \
+    chown -R appuser /app
 USER appuser
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
+# Run generator
 CMD ["python", "./main.py"]
