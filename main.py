@@ -18,17 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 def start(bikes: dict[Bike]) -> None:
-    """
-    Manage bike activation/deactivation
-
-    elif current < target:
-    - Activate bikes
-    elif current > target:
-    - Too many bikes
-    - Deactivate bikes
-    """
     inactive, active = bikes, {}
-
+    
     load_pattern = LoadPattern(
         LoadConfig(
             base_rate=LOAD_CONFIG["base_rate"],
@@ -45,9 +36,22 @@ def start(bikes: dict[Bike]) -> None:
 
             logger.info(f"Current bikes: {current_bikes}, Target bikes: {target_bikes}")
 
-            for bike in active.values():
+            # Remove failed bikes from active pool
+            failed_bikes = []
+            for number, bike in active.items():
                 if bike.active:
-                    bike.publish_current_state()
+                    try:
+                        bike.publish_current_state()
+                    except Exception as e:
+                        logger.error(f"Bike {number} failed to publish: {str(e)}")
+                        failed_bikes.append(number)
+                        bike.finish()
+
+            # Move failed bikes back to inactive
+            logger.info(f"Failed bikes: {failed_bikes}")
+            for number in failed_bikes:
+                bike = active.pop(number)
+                inactive[number] = bike
 
             # Handle bike count adjustments
             if current_bikes < target_bikes:
@@ -56,8 +60,13 @@ def start(bikes: dict[Bike]) -> None:
                     if not inactive:
                         break
                     number, bike = inactive.popitem()
-                    bike.start()
-                    active[number] = bike
+                    try:
+                        bike.start()
+                        active[number] = bike
+                    except Exception as e:
+                        logger.error(f"Failed to activate bike {number}: {str(e)}")
+                        inactive[number] = bike
+
             elif current_bikes > target_bikes:
                 to_deactivate = current_bikes - target_bikes
                 for _ in range(to_deactivate):
