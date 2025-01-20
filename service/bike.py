@@ -1,4 +1,4 @@
-import os
+import json
 import random
 import time
 import uuid
@@ -78,9 +78,11 @@ class Bike:
 
             response = requests.post(
                 f"http://{self.pod_ip}:{self.api_port}{self.publish_path}",
-                json=data,
+                data=json.dumps(data),
+                headers={"Content-Type": "application/json"},
                 timeout=5,
             )
+
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to publish data: {str(e)}")

@@ -1,13 +1,41 @@
 version: '3'
 
 services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./setup_rabbitmq.sh:/docker-entrypoint-initdb.d/setup_rabbitmq.sh
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+    command: bash -c "chmod +x /docker-entrypoint-initdb.d/setup_rabbitmq.sh && /docker-entrypoint-initdb.d/setup_rabbitmq.sh & rabbitmq-server"
+
+  companion:
+    container_name: companion
+    build:
+      context: ../../companion
+      dockerfile: Dockerfile
+    environment:
+      - RABBIT_IP=rabbitmq
+      - TOPIC=test
+      - RABBITMQ_PASSWORD=password
+      - APPLICATION=test
+    ports:
+      - "4321:4321"
+    depends_on:
+      - rabbitmq
+
   bike-generator:
     container_name: bike-generator
     build:
       context: .
       dockerfile: Dockerfile
     environment:
-      - MY_POD_IP=localhost
+      - MY_POD_IP=companion
       - API_PORT=4321
       - PUBLISH_PATH=/post_message
       - MY_POD_NAME=bike-generator
@@ -16,5 +44,8 @@ services:
       - ENVIRONMENT=production
     volumes:
       - ./dataset:/app/dataset:ro
-    ports:
-      - "4321:4321"
+    depends_on:
+      - companion
+
+volumes:
+  rabbitmq_data:
