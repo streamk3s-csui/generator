@@ -7,24 +7,23 @@ from dotenv import load_dotenv, find_dotenv
 
 @lru_cache
 def setup_env() -> None:
-    """
-    Reads current active environment,
-    then loads corresponding environment variables.
-    `@lru_cache` annotation makes sure `.env` files are only loaded once.
-    Subsequent calls will return the same value as its first call.
-    """
-    try:
-        # load current environment if .env file exists
+    app_env = os.getenv("APP_ENV", "development")  # Default to 'development' if APP_ENV is not set
+    
+    if app_env == "development":
+        print("Environment: Development")
+        
+        # Find and load the .env file
         env_file = find_dotenv(
             filename=".env",
-            raise_error_if_not_found=True,
+            raise_error_if_not_found=True,  # Ensure .env is mandatory in development
             usecwd=True
         )
-        if env_file:
-            load_dotenv(env_file, verbose=True)
-    except:
-        error_msg = 'No .env files were found.'
-        raise Exception(error_msg)
+        load_dotenv(env_file, verbose=True)
+        print(f"Loaded environment variables from {env_file}")
+    elif app_env == "production":
+        print("Environment: Production")
+    else:
+        raise Exception(f"Invalid APP_ENV value: {app_env}. Must be 'development' or 'production'.")
 
         
 def get_env_value(env_variable: str) -> str | int | bool | None:
