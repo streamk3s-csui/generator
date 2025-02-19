@@ -1,13 +1,11 @@
 import json
 import random
-import time
 import uuid
+import aiohttp
+import asyncio
+import requests
 
 from datetime import datetime
-
-import gpxpy
-import gpxpy.gpx
-import requests
 from config.variables import POD_IP, API_PORT, PUBLISH_PATH, POD_NAME, NAMESPACE
 from config.logging import logger
 
@@ -25,20 +23,24 @@ class Bike:
         self.longitude: float = 0
         self.speed: float = 0
         self.active: bool = False
-        self.gpxd = gpxd  # parsed gpx dataset
+        self.gpxd = gpxd
 
-    def start(self) -> None:
-        """Start bike journey along GPX track"""
+    async def start(self) -> None:
+        """Start bike journey asynchronously"""
         self.active = True
         self.battery_level = random.randint(75, 100)
 
-        for track in self.gpxd.tracks:
-            for segment in track.segments:
-                for point in segment.points:
-                    if not self.active:
-                        return
-                    self.publish(point.latitude, point.longitude, point.elevation)
-                    time.sleep(0.5)
+        async with aiohttp.ClientSession() as session:
+            self._session = session
+            for track in self.gpxd.tracks:
+                for segment in track.segments:
+                    for point in segment.points:
+                        if not self.active:
+                            return
+                        await self.publish(
+                            point.latitude, point.longitude, point.elevation
+                        )
+                        await asyncio.sleep(0.05)
 
         self.finish()
 
@@ -53,40 +55,32 @@ class Bike:
             json=termination_msg,
         )
 
-    def publish(self, latitude: float, longitude: float, elevation: float) -> None:
-        """Send daata"""
+    async def publish(self, lat: float, lon: float, elevation: float) -> None:
+        """Send data asynchronously"""
         try:
-            self.latitude = latitude
-            self.longitude = longitude
-            self.speed = random.uniform(0, 25)
-            self.battery_level -= 0.01
-
             data = {
                 "bike_id": str(self.id),
                 "number": self.number,
                 "timestamp": datetime.now().isoformat(),
-                "location": {
-                    "latitude": self.latitude,
-                    "longitude": self.longitude,
-                    "elevation": elevation,
-                },
+                "location": {"latitude": lat, "longitude": lon, "elevation": elevation},
                 "battery_level": self.battery_level,
-                "temperature": self.temp,
-                "speed": self.speed,
+                "temperature": random.uniform(20, 35),
+                "speed": random.uniform(0, 25),
                 "active": self.active,
             }
 
-            response = requests.post(
+            async with self._session.post(
                 f"http://{self.pod_ip}:{self.api_port}{self.publish_path}",
                 data=json.dumps(data),
                 headers={"Content-Type": "application/json"},
                 timeout=5,
-            )
+            ) as response:
+                response.raise_for_status()
+                logger.debug(f"Bike {self.number} published data")
 
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to publish data: {str(e)}")
-            self.active = False  # Stop bike
+        except Exception as e:
+            logger.error(f"Bike {self.number} failed to publish: {str(e)}")
+            self.active = False
 
     def get_speed(self) -> float:
         """

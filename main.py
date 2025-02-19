@@ -5,9 +5,10 @@ from collections import defaultdict
 
 import gpxpy
 import gpxpy.gpx
-import time
+import asyncio
 import multiprocessing
 import pickle
+import traceback
 
 from config.logging import logger
 from config.utils import get_env_value, setup_env
@@ -17,71 +18,104 @@ from service.load_pattern import LoadPattern, LoadConfig
 from concurrent.futures import ThreadPoolExecutor
 
 
-def start(bikes: dict[Bike]) -> None:
-    inactive, active = bikes, {}
-    
-    load_pattern = LoadPattern(
-        LoadConfig(
-            base_rate=LOAD_CONFIG["base_rate"],
-            peak_rate=LOAD_CONFIG["peak_rate"],
-            cycle_duration=LOAD_CONFIG["cycle_duration"],
+async def handle_task_exception(task: asyncio.Task) -> None:
+    try:
+        await task
+    except Exception as e:
+        logger.error(
+            f"Unhandled exception in task {task.get_name()}: {str(e)}\n{traceback.format_exc()}"
         )
+
+
+async def manage_load(
+    active_bikes: dict, inactive_bikes: dict, target_bikes: int, gpx_data: list
+):
+    """Dynamically scale bikes based on rate"""
+    try:
+        current_bikes = len(active_bikes)
+
+        if current_bikes < target_bikes:
+            needed = target_bikes - current_bikes
+            for _ in range(needed):
+                try:
+                    if not inactive_bikes:
+                        # Create new bike if pool is empty
+                        new_bike = Bike(
+                            number=len(active_bikes) + len(inactive_bikes),
+                            gpxd=random.choice(gpx_data),
+                        )
+                        inactive_bikes[new_bike.number] = new_bike
+                        logger.debug(f"Created new bike {new_bike.number}")
+
+                    num, bike = inactive_bikes.popitem()
+                    task = asyncio.create_task(bike.start(), name=f"bike-{num}")
+                    task.add_done_callback(handle_task_exception)
+                    active_bikes[num] = bike
+                except Exception as e:
+                    logger.error(
+                        f"Failed to activate bike: {str(e)}\n{traceback.format_exc()}"
+                    )
+
+        elif current_bikes > target_bikes:
+            excess = current_bikes - target_bikes
+            for _ in range(excess):
+                try:
+                    if active_bikes:
+                        num, bike = active_bikes.popitem()
+                        bike.active = False  # Signal to stop
+                        inactive_bikes[num] = bike
+                        logger.debug(f"Deactivated bike {num}")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to deactivate bike: {str(e)}\n{traceback.format_exc()}"
+                    )
+
+    except Exception as e:
+        logger.error(
+            f"Critical error in load management: {str(e)}\n{traceback.format_exc()}"
+        )
+        raise
+
+
+async def load_controller(gpx_data: list):
+    """Main control loop with error recovery"""
+    load_config = LoadConfig(
+        base_rate=LOAD_CONFIG["base_rate"],
+        peak_rate=LOAD_CONFIG["peak_rate"],
+        cycle_duration=LOAD_CONFIG["cycle_duration"],
     )
+    load_pattern = LoadPattern(load_config)
+    active_bikes = {}
+    inactive_bikes = {}
 
     while True:
         try:
             target_rate = load_pattern.get_next_rate()
-            target_bikes = int(target_rate / 2)
-            current_bikes = len(active)
+            target_bikes = max(
+                10, int(target_rate / 20)
+            )  # Adjust divisor based on testing
 
-            logger.info(f"Current bikes: {current_bikes}, Target bikes: {target_bikes}")
+            await manage_load(active_bikes, inactive_bikes, target_bikes, gpx_data)
 
-            # Remove failed bikes from active pool
-            failed_bikes = []
-            for number, bike in active.items():
-                if bike.active:
-                    try:
-                        bike.publish_current_state()
-                    except Exception as e:
-                        logger.error(f"Bike {number} failed to publish: {str(e)}")
-                        failed_bikes.append(number)
-                        bike.finish()
+            logger.info(
+                f"Target: {target_rate} msg/s | "
+                f"Target Bikes: {target_bikes} | "
+                f"Active Bikes: {len(active_bikes)} | "
+                f"Inactive Pool: {len(inactive_bikes)}"
+            )
+            await asyncio.sleep(1)
 
-            # Move failed bikes back to inactive
-            logger.info(f"Failed bikes: {failed_bikes}")
-            for number in failed_bikes:
-                bike = active.pop(number)
-                inactive[number] = bike
-
-            # Handle bike count adjustments
-            if current_bikes < target_bikes:
-                to_activate = target_bikes - current_bikes
-                for _ in range(to_activate):
-                    if not inactive:
-                        break
-                    number, bike = inactive.popitem()
-                    try:
-                        bike.start()
-                        active[number] = bike
-                    except Exception as e:
-                        logger.error(f"Failed to activate bike {number}: {str(e)}")
-                        inactive[number] = bike
-
-            elif current_bikes > target_bikes:
-                to_deactivate = current_bikes - target_bikes
-                for _ in range(to_deactivate):
-                    if not active:
-                        break
-                    number, bike = active.popitem()
-                    bike.finish()
-                    inactive[number] = bike
-
-            logger.info(f"Rate: {target_rate} msg/s, Active Publishing Bikes: {len([b for b in active.values() if b.active])}")
-            time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Shutting down gracefully...")
+            for bike in active_bikes.values():
+                bike.active = False
+            raise
 
         except Exception as e:
-            logger.error(f"Load management error: {str(e)}")
-            time.sleep(1)
+            logger.error(
+                f"Fatal error in controller loop: {str(e)}\n{traceback.format_exc()}"
+            )
+            await asyncio.sleep(5)  # Prevent tight error loops
 
 
 def load_gpx_file(file_path: str) -> gpxpy.gpx.GPX:
@@ -103,27 +137,44 @@ def parallel_load_gpx(file_paths: list) -> list:
         return list(executor.map(load_gpx_file, file_paths))
 
 
-def main() -> None:
-    setup_env()
-    N = 100  # Reduced for testing
-    GPX_DATAPATH = get_env_value("GPX_DATAPATH")
+async def main():
+    """Main async entry point with error boundaries"""
+    try:
+        setup_env()
+    except Exception as e:
+        logger.critical(f"Failed to load environment: {str(e)}")
+        return
 
-    gpx_files = [
-        os.path.join(GPX_DATAPATH, f)
-        for f in os.listdir(GPX_DATAPATH)
-        if f.endswith(".gpx")
-    ]
+    try:
+        GPX_DATAPATH = get_env_value("GPX_DATAPATH")
+    except Exception as e:
+        logger.critical(f"Missing GPX_DATAPATH: {str(e)}")
+        return
 
-    logger.info(f"Loading {len(gpx_files)} GPX files in parallel...")
-    gpx_data = parallel_load_gpx(gpx_files)
+    try:
+        gpx_files = [
+            os.path.join(GPX_DATAPATH, f)
+            for f in os.listdir(GPX_DATAPATH)
+            if f.endswith(".gpx")
+        ]
+        logger.info(f"Found {len(gpx_files)} GPX files")
 
-    # Create bikes with loaded GPX data
-    bikes = defaultdict(Bike)
-    for i in range(N):
-        bikes[i] = Bike(i, random.choice(gpx_data))
+        # Load GPX data with error handling
+        gpx_data = await asyncio.to_thread(parallel_load_gpx, gpx_files)
+        if not gpx_data:
+            logger.error("No valid GPX data loaded")
+            return
 
-    start(bikes)
+        await load_controller(gpx_data)
+
+    except Exception as e:
+        logger.critical(f"Main execution failed: {str(e)}\n{traceback.format_exc()}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Application terminated by user")
+    except Exception as e:
+        logger.critical(f"Catastrophic failure: {str(e)}\n{traceback.format_exc()}")
