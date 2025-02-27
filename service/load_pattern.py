@@ -1,8 +1,7 @@
 import math
-import random
 import time
+import numpy as np
 from dataclasses import dataclass
-
 
 @dataclass
 class LoadConfig:
@@ -30,9 +29,7 @@ class LoadPattern:
             + rate_range * (math.sin(cycle_position * 2 * math.pi) + 1) / 2
         )
 
-        # Add small random variation (±5%)
-        noise = random.uniform(-0.05, 0.05) * target
-        return int(target + noise)
+        return int(np.random.poisson(target))
 
     def get_next_rate(self) -> int:
         target = self.get_target_rate()

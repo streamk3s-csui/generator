@@ -40,8 +40,9 @@ class Bike:
                         await self.publish(
                             point.latitude, point.longitude, point.elevation
                         )
-                        await asyncio.sleep(0.05)
-
+                        # Add exponential delay to simulate poisson distribution
+                        # Rather than using fixed sleep.
+                        await asyncio.sleep(random.expovariate(20))
         self.finish()
 
     def finish(self) -> None:
