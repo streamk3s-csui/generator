@@ -6,7 +6,14 @@ import asyncio
 import requests
 
 from datetime import datetime
-from config.variables import POD_IP, API_PORT, PUBLISH_PATH, POD_NAME, NAMESPACE
+from config.variables import (
+    POD_IP,
+    API_PORT,
+    PUBLISH_PATH,
+    POD_NAME,
+    NAMESPACE,
+    LAMBDA_BIKE,
+)
 from config.logging import logger
 
 
@@ -29,7 +36,7 @@ class Bike:
         """Start bike journey asynchronously"""
         self.active = True
         self.battery_level = random.randint(75, 100)
-
+        logger.info(f"Bike {self.number} started its track")
         async with aiohttp.ClientSession() as session:
             self._session = session
             for track in self.gpxd.tracks:
@@ -42,18 +49,19 @@ class Bike:
                         )
                         # Add exponential delay to simulate poisson distribution
                         # Rather than using fixed sleep.
-                        await asyncio.sleep(random.expovariate(20))
+                        await asyncio.sleep(random.expovariate(LAMBDA_BIKE))
         self.finish()
 
-    def finish(self) -> None:
+    def finish(self):
         """Stop bike journey and send termination"""
         self.active = False
-        # Need to add termination message
         termination_msg = {"pod": POD_NAME, "namespace": NAMESPACE, "status": "ended"}
-        # Send termination message
         requests.post(
             f"http://{self.pod_ip}:{self.api_port}{self.publish_path}",
             json=termination_msg,
+        )
+        logger.info(
+            f"Bike {self.number} finished its track and sent termination message."
         )
 
     async def publish(self, lat: float, lon: float, elevation: float) -> None:

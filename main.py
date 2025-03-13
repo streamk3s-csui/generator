@@ -12,7 +12,7 @@ import traceback
 
 from config.logging import logger
 from config.utils import get_env_value, setup_env
-from config.variables import LOAD_CONFIG
+from config.variables import LOAD_CONFIG, LAMBDA_BIKE
 from service.bike import Bike
 from service.load_pattern import LoadPattern, LoadConfig
 from concurrent.futures import ThreadPoolExecutor
@@ -90,19 +90,42 @@ async def load_controller(gpx_data: list):
 
     while True:
         try:
+            # Get the target total rate for this batch
             target_rate = load_pattern.get_next_rate()
             target_bikes = max(
-                10, int(target_rate / 20)
-            )  # Adjust divisor based on testing
+                1, int(target_rate / LAMBDA_BIKE)
+            )  # Number of bikes needed
+            logger.info(
+                f"Starting new batch: Target rate = {target_rate}, Target bikes = {target_bikes}"
+            )
 
-            await manage_load(active_bikes, inactive_bikes, target_bikes, gpx_data)
+            # Activate bikes for the batch
+            for _ in range(target_bikes):
+                if inactive_bikes:
+                    num, bike = inactive_bikes.popitem()
+                else:
+                    num = len(active_bikes) + len(inactive_bikes)
+                    bike = Bike(number=num, gpxd=random.choice(gpx_data))
+                task = asyncio.create_task(bike.start(), name=f"bike-{num}")
+                task.add_done_callback(handle_task_exception)
+                active_bikes[num] = bike
+
+            # Wait for all bikes in the batch to finish
+            while active_bikes:
+                await asyncio.sleep(1)  # Check every second
+                logger.info(f"brrrr... {len(active_bikes)} bikes active")
+                # Remove finished bikes
+                finished_bikes = {
+                    num: bike for num, bike in active_bikes.items() if not bike.active
+                }
+                for num, bike in finished_bikes.items():
+                    del active_bikes[num]
+                    inactive_bikes[num] = bike
 
             logger.info(
-                f"Target: {target_rate} msg/s | "
-                f"Target Bikes: {target_bikes} | "
-                f"Active Bikes: {len(active_bikes)} | "
-                f"Inactive Pool: {len(inactive_bikes)}"
+                "All bikes in batch finished. Recalculating λ_total for next batch."
             )
+
             await asyncio.sleep(1)
 
         except KeyboardInterrupt:
