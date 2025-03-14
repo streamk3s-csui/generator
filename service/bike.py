@@ -6,7 +6,14 @@ import asyncio
 import requests
 
 from datetime import datetime
-from config.variables import POD_IP, API_PORT, PUBLISH_PATH, POD_NAME, NAMESPACE
+from config.variables import (
+    POD_IP,
+    API_PORT,
+    PUBLISH_PATH,
+    POD_NAME,
+    NAMESPACE,
+    LAMBDA_BIKE,
+)
 from config.logging import logger
 
 
@@ -42,7 +49,7 @@ class Bike:
                         )
                         # Add exponential delay to simulate poisson distribution
                         # Rather than using fixed sleep.
-                        await asyncio.sleep(random.expovariate(20))
+                        await asyncio.sleep(random.expovariate(LAMBDA_BIKE))
         self.finish()
 
     def finish(self) -> None:

@@ -1,8 +1,6 @@
 import os
 import random
 
-from collections import defaultdict
-
 import gpxpy
 import gpxpy.gpx
 import asyncio
@@ -12,7 +10,7 @@ import traceback
 
 from config.logging import logger
 from config.utils import get_env_value, setup_env
-from config.variables import LOAD_CONFIG
+from config.variables import LOAD_CONFIG, LAMBDA_BIKE
 from service.bike import Bike
 from service.load_pattern import LoadPattern, LoadConfig
 from concurrent.futures import ThreadPoolExecutor
@@ -91,9 +89,7 @@ async def load_controller(gpx_data: list):
     while True:
         try:
             target_rate = load_pattern.get_next_rate()
-            target_bikes = max(
-                10, int(target_rate / 20)
-            )  # Adjust divisor based on testing
+            target_bikes = max(10, int(target_rate / LAMBDA_BIKE))
 
             await manage_load(active_bikes, inactive_bikes, target_bikes, gpx_data)
 
