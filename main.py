@@ -12,7 +12,7 @@ import traceback
 
 from config.logging import logger
 from config.utils import get_env_value, setup_env
-from config.variables import LOAD_CONFIG
+from config.variables import LOAD_CONFIG, BURST_RATE, BURST_SIZE
 from service.bike import Bike
 from service.load_pattern import LoadPattern, LoadConfig
 from concurrent.futures import ThreadPoolExecutor
@@ -27,95 +27,50 @@ async def handle_task_exception(task: asyncio.Task) -> None:
         )
 
 
-async def manage_load(
-    active_bikes: dict, inactive_bikes: dict, target_bikes: int, gpx_data: list
-):
-    """Dynamically scale bikes based on rate"""
-    try:
-        current_bikes = len(active_bikes)
-
-        if current_bikes < target_bikes:
-            needed = target_bikes - current_bikes
-            for _ in range(needed):
-                try:
-                    if not inactive_bikes:
-                        # Create new bike if pool is empty
-                        new_bike = Bike(
-                            number=len(active_bikes) + len(inactive_bikes),
-                            gpxd=random.choice(gpx_data),
-                        )
-                        inactive_bikes[new_bike.number] = new_bike
-                        logger.debug(f"Created new bike {new_bike.number}")
-
-                    num, bike = inactive_bikes.popitem()
-                    task = asyncio.create_task(bike.start(), name=f"bike-{num}")
-                    task.add_done_callback(handle_task_exception)
-                    active_bikes[num] = bike
-                except Exception as e:
-                    logger.error(
-                        f"Failed to activate bike: {str(e)}\n{traceback.format_exc()}"
-                    )
-
-        elif current_bikes > target_bikes:
-            excess = current_bikes - target_bikes
-            for _ in range(excess):
-                try:
-                    if active_bikes:
-                        num, bike = active_bikes.popitem()
-                        bike.active = False  # Signal to stop
-                        inactive_bikes[num] = bike
-                        logger.debug(f"Deactivated bike {num}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to deactivate bike: {str(e)}\n{traceback.format_exc()}"
-                    )
-
-    except Exception as e:
-        logger.error(
-            f"Critical error in load management: {str(e)}\n{traceback.format_exc()}"
-        )
-        raise
-
-
-async def load_controller(gpx_data: list):
-    """Main control loop with error recovery"""
-    load_config = LoadConfig(
-        base_rate=LOAD_CONFIG["base_rate"],
-        peak_rate=LOAD_CONFIG["peak_rate"],
-        cycle_duration=LOAD_CONFIG["cycle_duration"],
+async def load_controller(gpx_data):
+    load_pattern = LoadPattern(
+        LoadConfig(base_rate=100, peak_rate=1000, cycle_duration=300)
     )
-    load_pattern = LoadPattern(load_config)
+
+    average_rate_per_bike = BURST_SIZE * BURST_RATE  # e.g., 5 messages/second
+
     active_bikes = {}
     inactive_bikes = {}
 
     while True:
-        try:
-            target_rate = load_pattern.get_next_rate()
-            target_bikes = max(
-                10, int(target_rate / 20)
-            )  # Adjust divisor based on testing
+        target_rate = load_pattern.get_next_rate()
 
-            await manage_load(active_bikes, inactive_bikes, target_bikes, gpx_data)
+        # Calculate bikes needed
+        target_bikes = max(1, int(target_rate / average_rate_per_bike))
 
-            logger.info(
-                f"Target: {target_rate} msg/s | "
-                f"Target Bikes: {target_bikes} | "
-                f"Active Bikes: {len(active_bikes)} | "
-                f"Inactive Pool: {len(inactive_bikes)}"
-            )
-            await asyncio.sleep(1)
+        logger.info(f"Starting new batch: {target_bikes} bikes")
 
-        except KeyboardInterrupt:
-            logger.info("Shutting down gracefully...")
-            for bike in active_bikes.values():
-                bike.active = False
-            raise
+        # Start a batch of bikes
+        for _ in range(target_bikes):
+            if inactive_bikes:
+                num, bike = inactive_bikes.popitem()
+            else:
+                num = len(active_bikes) + len(inactive_bikes)
+                bike = Bike(
+                    number=num,
+                    gpxd=random.choice(gpx_data),
+                )
+            task = asyncio.create_task(bike.start(), name=f"bike-{num}")
+            task.add_done_callback(handle_task_exception)
+            active_bikes[num] = bike
 
-        except Exception as e:
-            logger.error(
-                f"Fatal error in controller loop: {str(e)}\n{traceback.format_exc()}"
-            )
-            await asyncio.sleep(5)  # Prevent tight error loops
+        # Monitor active bikes until they finish
+        while active_bikes:
+            await asyncio.sleep(1)  # Check every second
+            finished_bikes = {
+                num: bike for num, bike in active_bikes.items() if not bike.active
+            }
+            for num, bike in finished_bikes.items():
+                del active_bikes[num]
+                inactive_bikes[num] = bike
+
+        logger.info("All bikes in batch finished. Recalculating for next batch.")
+        await asyncio.sleep(1)
 
 
 def load_gpx_file(file_path: str) -> gpxpy.gpx.GPX:

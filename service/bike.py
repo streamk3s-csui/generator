@@ -6,7 +6,15 @@ import asyncio
 import requests
 
 from datetime import datetime
-from config.variables import POD_IP, API_PORT, PUBLISH_PATH, POD_NAME, NAMESPACE
+from config.variables import (
+    POD_IP,
+    API_PORT,
+    PUBLISH_PATH,
+    POD_NAME,
+    NAMESPACE,
+    BURST_SIZE,
+    BURST_RATE,
+)
 from config.logging import logger
 
 
@@ -24,26 +32,42 @@ class Bike:
         self.speed: float = 0
         self.active: bool = False
         self.gpxd = gpxd
+        self.burst_size = BURST_SIZE  # Number of messages per burst
+        self.λ_burst = BURST_RATE  # Bursts per second
+
+    def _flatten_points(self):
+        """Flatten all GPX track points into a single list."""
+        points = []
+        for track in self.gpxd.tracks:
+            for segment in track.segments:
+                points.extend(segment.points)
+        return points
 
     async def start(self) -> None:
-        """Start bike journey asynchronously"""
+        """Start sending bursts of messages with Poisson-distributed inter-burst times."""
         self.active = True
         self.battery_level = random.randint(75, 100)
 
         async with aiohttp.ClientSession() as session:
             self._session = session
-            for track in self.gpxd.tracks:
-                for segment in track.segments:
-                    for point in segment.points:
-                        if not self.active:
-                            return
-                        await self.publish(
-                            point.latitude, point.longitude, point.elevation
-                        )
-                        # Add exponential delay to simulate poisson distribution
-                        # Rather than using fixed sleep.
-                        await asyncio.sleep(random.expovariate(20))
-        self.finish()
+            point_index = 0
+            while point_index < len(self.points):
+                if not self.active:
+                    return
+                # Send a burst of messages
+                burst_end = min(point_index + self.burst_size, len(self.points))
+                for i in range(point_index, burst_end):
+                    point = self.points[i]
+                    await self.publish(point.latitude, point.longitude, point.elevation)
+                    await asyncio.sleep(0.01)  # Small delay between messages
+
+                point_index = burst_end
+                # Wait for the next burst with exponential delay
+                if point_index < len(self.points):
+                    inter_burst_time = random.expovariate(self.λ_burst)
+                    await asyncio.sleep(inter_burst_time)
+
+            self.finish()
 
     def finish(self) -> None:
         """Stop bike journey and send termination"""
