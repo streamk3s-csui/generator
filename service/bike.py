@@ -34,6 +34,7 @@ class Bike:
         self.gpxd = gpxd
         self.burst_size = BURST_SIZE  # Number of messages per burst
         self.λ_burst = BURST_RATE  # Bursts per second
+        self.points = self._flatten_points()
 
     def _flatten_points(self):
         """Flatten all GPX track points into a single list."""
