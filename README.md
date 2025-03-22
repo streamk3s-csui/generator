@@ -9,9 +9,8 @@ Simulates bike sharing data streams by first generating N number of bike data, t
    1. Low throughput simulation: `100 < N < 500`
    2. Medium throughput simulation: `500 < N < 1000`
    3. High throughput simulation: `1000 < N < 1500`
-   
-Data generated from those bikes will then be sent to an external message broker running on the StreamK3s platform, hosting a MQTT message broker as its operator image.
 
+Data generated from those bikes will then be sent to an external message broker running on the StreamK3s platform, hosting a MQTT message broker as its operator image.
 
 ## Dataset
 
@@ -19,18 +18,19 @@ Dataset sourced from [OpenStreetMap](https://www.openstreetmap.org/traces)'s pub
 
 The `.gpx` file will then be parsed with the [gpxpy](https://pypi.org/project/gpxpy/) package on each bike to simulate them going through the routes from its start to its waypoint, resulting in realistic latitude & longitude data. Time will be the same as host time, and speed & temperatures will be randomized. Battery levels will drain with a fixed rate where only the start level will be randomized.
 
-
 ## Quickstart (development)
 
 1. Setup virtual environment:
 
    Windows
+
    ```
    python -m venv .venv
    .venv\Scripts\activate.bat
    ```
-   
+
    Linux
+
    ```
    virtualenv .venv
    source .venv/bin/activate
@@ -49,3 +49,11 @@ The `.gpx` file will then be parsed with the [gpxpy](https://pypi.org/project/gp
    ```
    python main.py
    ```
+
+How to run the locust?
+
+```
+locust -f locustfile.py --host=http://localhost:4321 --headless --users 0 --run-time 1m
+```
+
+Docker config on development after scenario are finished
