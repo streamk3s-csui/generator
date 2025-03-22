@@ -1,8 +1,6 @@
 import os
 import random
-import uuid
 import time
-from datetime import datetime
 from locust import HttpUser, task, events
 from locust.exception import StopUser
 from locust.runners import MasterRunner, LocalRunner
