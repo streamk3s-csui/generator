@@ -9,7 +9,7 @@ from locust.runners import MasterRunner, LocalRunner
 import gpxpy
 import pickle
 from concurrent.futures import ThreadPoolExecutor
-from config.variables import GPX_DATAPATH, LAMBDA_BIKE
+from config.variables import GPX_DATAPATH, LAMBDA_BIKE, POD_NAME, NAMESPACE
 from config.logging import logger
 from service.load_pattern import LoadPattern, LoadConfig
 import threading
@@ -109,8 +109,8 @@ class BikeUser(HttpUser):
 
         # Send termination message
         termination_msg = {
-            "pod": f"bike-{self.number}",
-            "namespace": "test",
+            "pod": POD_NAME,
+            "namespace": NAMESPACE,
             "status": "ended",
         }
         self.client.post("/post_message", json=termination_msg)
