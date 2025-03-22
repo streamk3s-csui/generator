@@ -16,6 +16,7 @@ import threading
 gpx_data = []
 active_bikes = {}  # Active bike instance
 inactive_bikes = {}  # Inactive bike instance
+active_users = {}  # Track active BikeUser instances: {user_id: BikeUser}
 bike_lock = threading.Lock()  # Thread-safe access to bike pools
 
 
@@ -92,12 +93,23 @@ def manage_bike_load(environment):
 
             # User Adjustment
             current_users = environment.runner.user_count
+
             if current_users < target_bikes:
+                spawn_count = target_bikes - current_users
                 environment.runner.start(
                     user_count=target_bikes, spawn_rate=10, wait=False
                 )
+                logger.info(f"Spawning {spawn_count} additional users")
             elif current_users > target_bikes:
-                environment.runner.stop_users(count=current_users - target_bikes)
+                excess_users = current_users - target_bikes
+                users_to_stop = list(active_users.items())[:excess_users]
+                for user_id, user in users_to_stop:
+                    if user.bike.number in active_bikes:
+                        user.bike.active = False  # Signal bike to stop
+                        logger.info(
+                            f"Signaling user {user_id} (bike {user.bike.number}) to stop"
+                        )
+                    del active_users[user_id]
 
         logger.info(
             f"Target: {target_rate} msg/s | Target Bikes: {target_bikes} | "
@@ -125,7 +137,12 @@ class BikeUser(HttpUser):
             # from being assigned to multiple users
             num, self.bike = active_bikes.popitem()
             self.bike.active = True  # Make sure active
-        logger.info(f"User assigned to bike {self.bike.number}")
+
+            # Assign unique id to user so that we can
+            # stop the user later if needed
+            self.user_id = id(self)
+            active_users[self.user_id] = self
+        logger.info(f"User {self.user_id} assigned to bike {self.bike.number}")
 
     @task
     def run_track(self):
@@ -138,4 +155,13 @@ class BikeUser(HttpUser):
                 if self.bike.number not in active_bikes:
                     inactive_bikes[self.bike.number] = self.bike
                     logger.info(f"Bike {self.bike.number} moved to inactive pool")
+
+                if self.user_id in active_users:
+                    del active_users[self.user_id]
         raise StopUser()
+
+    def on_stop(self):
+        # Clean up
+        with bike_lock:
+            if self.user_id in active_users:
+                del active_users[self.user_id]
