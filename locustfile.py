@@ -90,7 +90,7 @@ def manage_bike_load(environment):
                         inactive_bikes[num] = bike
                         logger.info(f"Deactivated bike {num}")
 
-            # Locust Adjustment
+            # User Adjustment
             current_users = environment.runner.user_count
             if current_users < target_bikes:
                 environment.runner.start(
@@ -115,12 +115,16 @@ def on_test_start_manage_bikes(environment, **kwargs):
 class BikeUser(HttpUser):
     def on_start(self):
         with bike_lock:
-            # Pick an active bike or wait briefly if none available
             if not active_bikes:
                 time.sleep(1)
                 if not active_bikes:
                     raise StopUser("No active bikes available")
-            self.bike = list(active_bikes.values())[0]  # Take the first active bike
+            # Pop a bike from active_bikes so that we know
+            # who is assigned to this bikeuser right now
+            # and this will also prevent the same bike
+            # from being assigned to multiple users
+            num, self.bike = active_bikes.popitem()
+            self.bike.active = True  # Make sure active
         logger.info(f"User assigned to bike {self.bike.number}")
 
     @task
@@ -128,8 +132,10 @@ class BikeUser(HttpUser):
         if self.bike.active:
             self.bike.run_track(self.client)
             with bike_lock:
-                if self.bike.number in active_bikes:
-                    del active_bikes[self.bike.number]
+                # Because previously it was popped from active_bikes
+                # now we need to add it back to inactive_bikes
+                # se;f.bike.active = False will be handled when track is finished
+                if self.bike.number not in active_bikes:
                     inactive_bikes[self.bike.number] = self.bike
                     logger.info(f"Bike {self.bike.number} moved to inactive pool")
         raise StopUser()
