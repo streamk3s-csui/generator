@@ -27,56 +27,6 @@ async def handle_task_exception(task: asyncio.Task) -> None:
         )
 
 
-async def manage_load(
-    active_bikes: dict, inactive_bikes: dict, target_bikes: int, gpx_data: list
-):
-    """Dynamically scale bikes based on rate"""
-    try:
-        current_bikes = len(active_bikes)
-
-        if current_bikes < target_bikes:
-            needed = target_bikes - current_bikes
-            for _ in range(needed):
-                try:
-                    if not inactive_bikes:
-                        # Create new bike if pool is empty
-                        new_bike = Bike(
-                            number=len(active_bikes) + len(inactive_bikes),
-                            gpxd=random.choice(gpx_data),
-                        )
-                        inactive_bikes[new_bike.number] = new_bike
-                        logger.debug(f"Created new bike {new_bike.number}")
-
-                    num, bike = inactive_bikes.popitem()
-                    task = asyncio.create_task(bike.start(), name=f"bike-{num}")
-                    task.add_done_callback(handle_task_exception)
-                    active_bikes[num] = bike
-                except Exception as e:
-                    logger.error(
-                        f"Failed to activate bike: {str(e)}\n{traceback.format_exc()}"
-                    )
-
-        elif current_bikes > target_bikes:
-            excess = current_bikes - target_bikes
-            for _ in range(excess):
-                try:
-                    if active_bikes:
-                        num, bike = active_bikes.popitem()
-                        bike.active = False  # Signal to stop
-                        inactive_bikes[num] = bike
-                        logger.debug(f"Deactivated bike {num}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to deactivate bike: {str(e)}\n{traceback.format_exc()}"
-                    )
-
-    except Exception as e:
-        logger.error(
-            f"Critical error in load management: {str(e)}\n{traceback.format_exc()}"
-        )
-        raise
-
-
 async def load_controller(gpx_data: list):
     """Main control loop with error recovery"""
     load_config = LoadConfig(
