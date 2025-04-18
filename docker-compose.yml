@@ -44,6 +44,8 @@ services:
       - ENVIRONMENT=production
     volumes:
       - ./dataset:/app/dataset:ro
+    ports:
+      - "8089:8089"
     depends_on:
       - companion
 
