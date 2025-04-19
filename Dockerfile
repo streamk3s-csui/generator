@@ -4,8 +4,10 @@ FROM python:3.11-slim
 ENV MY_POD_IP="companion-container"
 ENV API_PORT="4321"
 ENV PUBLISH_PATH="/post_message"
-ENV MY_POD_NAME=""
-ENV MY_POD_NAMESPACE=""
+ENV MY_POD_NAME="bike-generator"
+ENV MY_POD_NAMESPACE="test"
+ENV GPX_DATAPATH="/app/dataset"
+ENV ENVIRONMENT="production"
 
 # Vector logging config
 ENV VECTOR_SINK_ADDR=${VECTOR_SINK_ADDR}
