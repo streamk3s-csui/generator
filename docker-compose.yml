@@ -14,8 +14,8 @@ services:
       - RABBITMQ_DEFAULT_PASS=password
     command: bash -c "chmod +x /docker-entrypoint-initdb.d/setup_rabbitmq.sh && /docker-entrypoint-initdb.d/setup_rabbitmq.sh & rabbitmq-server"
 
-  companion:
-    container_name: companion
+  companion-container:
+    container_name: companion-container
     build:
       context: ../../companion
       dockerfile: Dockerfile
@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - MY_POD_IP=companion
+      - MY_POD_IP=companion-container
       - API_PORT=4321
       - PUBLISH_PATH=/post_message
       - MY_POD_NAME=bike-generator
@@ -47,7 +47,7 @@ services:
     ports:
       - "8089:8089"
     depends_on:
-      - companion
+      - companion-container
 
 volumes:
   rabbitmq_data:
