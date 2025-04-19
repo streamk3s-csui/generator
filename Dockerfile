@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 # StreamK3s environment variables
-ENV MY_POD_IP=""
+ENV MY_POD_IP="companion-container"
 ENV API_PORT="4321"
 ENV PUBLISH_PATH="/post_message"
 ENV MY_POD_NAME=""
