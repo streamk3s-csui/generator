@@ -18,14 +18,16 @@ import threading
 load_pattern = LoadPattern(
     LoadConfig(base_rate=100, peak_rate=1000, cycle_duration=300)
 )
+
 # Global variables
 gpx_data = []
 current_batch_id = 0
 active_bike_count = 0  # Tracks active bikes in the current batch
+batch_active = False
 batch_lock = threading.Lock()  # For thread-safe counter updates
 
 
-# Load a single GPX file with caching
+# Load GPX files (unchanged)
 def load_gpx_file(file_path):
     cache_path = f"{file_path}.cache"
     if os.path.exists(cache_path):
@@ -38,7 +40,6 @@ def load_gpx_file(file_path):
         return gpxd
 
 
-# Load all GPX files from a directory
 def load_all_gpx(directory):
     gpx_files = [
         os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".gpx")
@@ -50,7 +51,6 @@ def load_all_gpx(directory):
     return gpx_data
 
 
-# Load GPX data when the test starts
 @events.test_start.add_listener
 def on_test_start_load_gpx(**kwargs):
     global gpx_data
@@ -62,29 +62,31 @@ def on_test_start_load_gpx(**kwargs):
         raise
 
 
-# Batch management
+# Batch management with batch_active
 def manage_batches(environment):
-    global current_batch_id, active_bike_count
+    global current_batch_id, active_bike_count, batch_active
     while True:
-        target_rate = load_pattern.get_next_rate()
-        target_bikes = max(1, int(target_rate / LAMBDA_BIKE))
-        logger.info(
-            f"Starting batch {current_batch_id} with {target_bikes} bikes (λ_total={target_rate})"
-        )
-
         with batch_lock:
-            active_bike_count = target_bikes
-        environment.runner.start(user_count=target_bikes, spawn_rate=1, wait=False)
+            if not batch_active:
+                target_rate = load_pattern.get_next_rate()
+                target_bikes = max(1, int(target_rate / LAMBDA_BIKE))
+                logger.info(
+                    f"Starting batch {current_batch_id} with {target_bikes} bikes"
+                )
+                active_bike_count = target_bikes
+                batch_active = True
+                environment.runner.start(
+                    user_count=target_bikes, spawn_rate=10, wait=False
+                )
+                current_batch_id += 1
 
         while True:
             with batch_lock:
                 if active_bike_count <= 0:
+                    logger.info(f"Batch {current_batch_id - 1} completed")
+                    batch_active = False
                     break
             time.sleep(1)
-
-        environment.runner.stop()
-        logger.info(f"Batch {current_batch_id} completed")
-        current_batch_id += 1
 
 
 # BikeUser class
@@ -95,7 +97,7 @@ class BikeUser(HttpUser):
         self.track = random.choice(gpx_data)
         self.number = random.randint(1, 10000)
         self.id = str(uuid.uuid4())
-        self.batch_id = current_batch_id
+        self.batch_id = current_batch_id - 1
         logger.info(f"Bike {self.number} (batch {self.batch_id}) started")
 
     @task
@@ -106,8 +108,6 @@ class BikeUser(HttpUser):
                 for point in segment.points:
                     self.publish(point.latitude, point.longitude, point.elevation)
                     time.sleep(random.expovariate(LAMBDA_BIKE))
-
-        # Send termination message
         termination_msg = {
             "pod": POD_NAME,
             "namespace": NAMESPACE,
@@ -115,7 +115,6 @@ class BikeUser(HttpUser):
         }
         self.client.post("/post_message", json=termination_msg)
         logger.info(f"Bike {self.number} (batch {self.batch_id}) finished track")
-
         # Decrement active bike count
         global active_bike_count
         with batch_lock:
@@ -138,7 +137,7 @@ class BikeUser(HttpUser):
             logger.error(f"Bike {self.number} failed to publish: {response.text}")
 
 
-# Start the batch manager
+# Start batch manager
 @events.test_start.add_listener
 def on_test_start_manage_batches(environment, **kwargs):
     if isinstance(environment.runner, (MasterRunner, LocalRunner)):

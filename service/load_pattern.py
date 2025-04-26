@@ -3,16 +3,17 @@ import time
 import numpy as np
 from dataclasses import dataclass
 
+
 @dataclass
 class LoadConfig:
-    base_rate: int = 100  # Minimum messages/sec
-    peak_rate: int = 1000  # Maximum messages/sec
-    cycle_duration: int = 300  # Seconds for one complete wave
+    base_rate: int
+    peak_rate: int
+    cycle_duration: int = 300
     transition_step: float = 0.1  # Max 10% change per step
 
 
 class LoadPattern:
-    def __init__(self, config: LoadConfig = LoadConfig()):
+    def __init__(self, config: LoadConfig):
         self.config = config
         self.start_time = time.time()
         self.current_rate = config.base_rate
