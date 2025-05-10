@@ -15,4 +15,4 @@ GPX_DATAPATH = os.getenv("GPX_DATAPATH", "/dataset")
 # Load pattern configuration
 LOAD_CONFIG = {"base_rate": 100, "peak_rate": 1000, "cycle_duration": 300}
 # λ Bike
-LAMBDA_BIKE = 10
+LAMBDA_BIKE = 5
