@@ -57,7 +57,7 @@ def on_test_start_load_gpx(**kwargs):
 # Manage bike activation/deactivation
 def manage_bike_load(environment):
     load_pattern = LoadPattern(
-        LoadConfig(base_rate=10, peak_rate=40, cycle_duration=300)
+        LoadConfig(base_rate=10, peak_rate=25, cycle_duration=300)
     )
     while True:
         target_rate = load_pattern.get_next_rate()
