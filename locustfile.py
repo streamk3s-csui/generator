@@ -15,9 +15,7 @@ from service.load_pattern import LoadPattern, LoadConfig
 import threading
 
 # Constants
-load_pattern = LoadPattern(
-    LoadConfig(base_rate=100, peak_rate=1000, cycle_duration=300)
-)
+load_pattern = LoadPattern(LoadConfig(base_rate=10, peak_rate=25, cycle_duration=300))
 
 # Global variables
 gpx_data = []
@@ -69,6 +67,7 @@ def manage_batches(environment):
         with batch_lock:
             if not batch_active:
                 target_rate = load_pattern.get_next_rate()
+                print(f"Target rate: {target_rate}")
                 target_bikes = max(1, int(target_rate / LAMBDA_BIKE))
                 logger.info(
                     f"Starting batch {current_batch_id} with {target_bikes} bikes"
