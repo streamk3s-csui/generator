@@ -16,7 +16,7 @@ GPX_DATAPATH = os.getenv("GPX_DATAPATH", "/dataset")
 LOAD_CONFIG = {"base_rate": 100, "peak_rate": 1000, "cycle_duration": 300}
 
 # Burst size (number of messages per burst)
-BURST_SIZE = 50
+BURST_SIZE = 75
 
 # Burst rate (bursts per second)
-BURST_RATE = 0.1  # 1 burst every 10 seconds
+BURST_RATE = 0.2  # 1 burst every 5 seconds

@@ -3,6 +3,7 @@ import time
 import numpy as np
 from dataclasses import dataclass
 
+
 @dataclass
 class LoadConfig:
     base_rate: int = 100  # Minimum messages/sec
