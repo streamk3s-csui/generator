@@ -15,7 +15,7 @@ from service.load_pattern import LoadPattern, LoadConfig
 import threading
 
 # Constants
-load_pattern = LoadPattern(LoadConfig(base_rate=1, peak_rate=10, cycle_duration=300))
+load_pattern = LoadPattern(LoadConfig(base_rate=25, peak_rate=80, cycle_duration=300))
 
 # Global variables
 gpx_data = []

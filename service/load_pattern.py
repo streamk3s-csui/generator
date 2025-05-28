@@ -9,7 +9,7 @@ class LoadConfig:
     base_rate: int
     peak_rate: int
     cycle_duration: int = 300
-    transition_step: float = 0.1  # Max 10% change per step
+    transition_step: float = 0.5  # Max 10% change per step
 
 
 class LoadPattern:
