@@ -68,9 +68,10 @@ def on_test_start_load_gpx(**kwargs):
 def manage_batches(environment):
     global current_batch_id, active_bike_count, batch_active
     load_pattern = LoadPattern(
-        LoadConfig(base_rate=100, peak_rate=1000, cycle_duration=300)
+        LoadConfig(base_rate=10, peak_rate=25, cycle_duration=300)
     )
     average_rate_per_bike = BURST_SIZE * BURST_RATE  # Messages per second per bike
+    logger.info(f"Average rate per bike: {average_rate_per_bike} messages/sec")
     while True:
         with batch_lock:
             if not batch_active:  # Only start a new batch if none is active
