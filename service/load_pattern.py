@@ -9,7 +9,7 @@ class LoadConfig:
     base_rate: int = 100  # Minimum messages/sec
     peak_rate: int = 1000  # Maximum messages/sec
     cycle_duration: int = 300  # Seconds for one complete wave
-    transition_step: float = 0.1  # Max 10% change per step
+    transition_step: float = 0.3  # Max 30% change per step
 
 
 class LoadPattern:
