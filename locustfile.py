@@ -25,6 +25,7 @@ import threading
 gpx_data = []
 current_batch_id = 0
 active_bike_count = 0  # Tracks active bikes in the current batch
+batch_active = False
 batch_lock = threading.Lock()  # For thread-safe counter updates
 
 
@@ -65,31 +66,33 @@ def on_test_start_load_gpx(**kwargs):
 
 
 def manage_batches(environment):
-    global current_batch_id, active_bike_count
+    global current_batch_id, active_bike_count, batch_active
     load_pattern = LoadPattern(
         LoadConfig(base_rate=100, peak_rate=1000, cycle_duration=300)
     )
     average_rate_per_bike = BURST_SIZE * BURST_RATE  # Messages per second per bike
     while True:
-        target_rate = load_pattern.get_next_rate()
-        target_bikes = max(1, int(target_rate / average_rate_per_bike))
-        logger.info(
-            f"Starting batch {current_batch_id} with {target_bikes} bikes (λ_total={target_rate})"
-        )
-
         with batch_lock:
-            active_bike_count = target_bikes
-        environment.runner.start(user_count=target_bikes, spawn_rate=10, wait=False)
-
+            if not batch_active:  # Only start a new batch if none is active
+                target_rate = load_pattern.get_next_rate()
+                target_bikes = max(1, int(target_rate / average_rate_per_bike))
+                logger.info(
+                    f"Starting batch {current_batch_id} with {target_bikes} bikes (λ_total={target_rate})"
+                )
+                active_bike_count = target_bikes
+                batch_active = True
+                environment.runner.start(
+                    user_count=target_bikes, spawn_rate=10, wait=False
+                )
+                current_batch_id += 1
+        # Wait for the current batch to complete
         while True:
             with batch_lock:
                 if active_bike_count <= 0:
+                    logger.info(f"Batch {current_batch_id - 1} completed")
+                    batch_active = False  # Mark batch as inactive
                     break
             time.sleep(1)
-
-        environment.runner.stop()
-        logger.info(f"Batch {current_batch_id} completed")
-        current_batch_id += 1
 
 
 # Start batch manager at test start
