@@ -1,14 +1,19 @@
 FROM python:3.11-slim
 
 # StreamK3s environment variables
-ENV MY_POD_IP=""
+ENV MY_POD_IP="companion-container"
 ENV API_PORT="4321"
 ENV PUBLISH_PATH="/post_message"
-ENV MY_POD_NAME=""
-ENV MY_POD_NAMESPACE=""
+ENV MY_POD_NAME="bike-generator"
+ENV MY_POD_NAMESPACE="test"
+ENV GPX_DATAPATH="/app/dataset"
+ENV ENVIRONMENT="production"
 
 # Vector logging config
 ENV VECTOR_SINK_ADDR=${VECTOR_SINK_ADDR}
+
+# Locust environment variables
+ENV LOCUST_USERS="0"
 
 # Python settings
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -27,5 +32,7 @@ RUN adduser -u 5678 --disabled-password --gecos "" appuser && \
     chown -R appuser /app
 USER appuser
 
+EXPOSE 8089
+
 # Run generator
-CMD ["python", "./main.py"]
+CMD locust -f locustfile.py --web-host=0.0.0.0 --host=http://${MY_POD_IP}:${API_PORT} --users ${LOCUST_USERS}
